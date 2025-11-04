@@ -3,7 +3,7 @@ from datetime import datetime
 
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-from dash import Input, Output, dcc, html
+from dash import Input, Output, callback_context, dcc, html
 
 from app import app
 from dashboards.aios.datatable_pagesize import DataTableWithPageSizeDD
@@ -17,6 +17,8 @@ from dashboards.shared.database import DB
 
 PATH = "/dashboards/trials_product_usage"
 PRODUCT_LIST = ["BCS", "GRABBER", "EXPORT", "VR"]
+DEFAULT_SELECTION_MESSAGE = "Click a segment to show the users for your desired section."
+
 
 
 @app.callback(
@@ -110,6 +112,54 @@ def update_product_graph(start_date: str, end_date: str):
 
     return fig
 
+@app.callback(
+    Output("free-trials-products-selection-summary", "children"),
+    Input("free-trials-products-products-graph", "clickData"),
+    Input(
+        DatePickerAIO.IDS.datepicker("free-trials-products-global-datepicker"),
+        "start_date",
+    ),
+    Input(
+        DatePickerAIO.IDS.datepicker("free-trials-products-global-datepicker"),
+        "end_date",
+    ),
+)
+def update_product_selection(click_data: dict | None, _start_date: str | None, _end_date: str | None):
+    """Display the selected product/day underneath the product usage chart."""
+
+    triggered_prop = (
+        callback_context.triggered[0]["prop_id"] if callback_context.triggered else None
+    )
+    if triggered_prop != "free-trials-products-products-graph.clickData":
+        return DEFAULT_SELECTION_MESSAGE
+
+    if not click_data or "points" not in click_data or not click_data["points"]:
+        return DEFAULT_SELECTION_MESSAGE
+
+    point = click_data["points"][0]
+
+    product_name = (
+        point.get("data", {}).get("name")
+        or point.get("fullData", {}).get("name")
+        or "Unknown"
+    )
+
+    day_value = point.get("x")
+    if isinstance(day_value, (int, float)) and float(day_value).is_integer():
+        day_label = f"Day {int(day_value)}"
+    elif isinstance(day_value, str):
+        try:
+            numeric_day = float(day_value)
+        except ValueError:
+            day_label = f"Day {day_value}"
+        else:
+            day_label = (
+                f"Day {int(numeric_day)}" if numeric_day.is_integer() else f"Day {numeric_day}"
+            )
+    else:
+        day_label = f"Day {day_value}" if day_value is not None else "Day ?"
+
+    return f"Product: {product_name} - {day_label}"
 
 @app.callback(
     Output("free-trials-products-activities-graph", "figure"),
@@ -446,6 +496,11 @@ def get_layout() -> html.Div:
                             "Number of unique active users (by product and day of their trial)."
                         ),
                         dcc.Loading(dcc.Graph(id="free-trials-products-products-graph")),
+                        html.P(
+                            DEFAULT_SELECTION_MESSAGE,
+                            id="free-trials-products-selection-summary",
+                            className="text-muted mt-2",
+                        ),
                     ],
                 ),
             ),
