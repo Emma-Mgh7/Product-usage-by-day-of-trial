@@ -107,6 +107,8 @@ def update_product_graph(start_date: str, end_date: str):
                 x=days,
                 y=[day_to_count.get(day, 0) for day in days],  # fall back to 0 on missing days
                 name=product,
+                customdata=[[product]] * len(days),
+
             )
         )
 
@@ -138,11 +140,18 @@ def update_product_selection(click_data: dict | None, _start_date: str | None, _
 
     point = click_data["points"][0]
 
-    product_name = (
-        point.get("data", {}).get("name")
-        or point.get("fullData", {}).get("name")
-        or "Unknown"
-    )
+    product_name = point.get("customdata")
+    if isinstance(product_name, (list, tuple)):
+        product_name = product_name[0] if product_name else None
+
+    if not product_name and isinstance(point.get("data"), dict):
+        product_name = point["data"].get("name") or point["data"].get("meta")
+
+    if not product_name and isinstance(point.get("fullData"), dict):
+        product_name = point["fullData"].get("name") or point["fullData"].get("meta")
+
+    if not product_name:
+        product_name = "Unknown"
 
     day_value = point.get("x")
     if isinstance(day_value, (int, float)) and float(day_value).is_integer():
@@ -160,6 +169,7 @@ def update_product_selection(click_data: dict | None, _start_date: str | None, _
         day_label = f"Day {day_value}" if day_value is not None else "Day ?"
 
     return f"Product: {product_name} - {day_label}"
+
 
 @app.callback(
     Output("free-trials-products-activities-graph", "figure"),
