@@ -83,6 +83,7 @@ def update_product_graph(start_date: str, end_date: str):
         layout={
             "barmode": "stack",
             "hovermode": "x",
+            "clickmode": "event+select",
             "margin": {"t": 30},
             "transition_duration": 500,
             "xaxis": {"title": "day of the trial", "tickmode": "linear"},
@@ -106,7 +107,6 @@ def update_product_graph(start_date: str, end_date: str):
                 x=days,
                 y=[day_to_count.get(day, 0) for day in days],  # fall back to 0 on missing days
                 name=product,
-                customdata=[product] * len(days),
             )
         )
 
@@ -145,23 +145,21 @@ def update_product_selection(
 
     point = click_data["points"][0]
 
-    product_name = point.get("customdata")
-    if isinstance(product_name, (list, tuple)):
-        product_name = product_name[0] if product_name else None
+    product_name = None
 
-    if not product_name and isinstance(point.get("data"), dict):
-        product_name = point["data"].get("name") or point["data"].get("meta")
-
-    if not product_name and isinstance(point.get("fullData"), dict):
-        product_name = point["fullData"].get("name") or point["fullData"].get("meta")
-
-    if not product_name and isinstance(figure_state, dict):
+    if isinstance(figure_state, dict):
         curve_number = point.get("curveNumber")
         data_traces = figure_state.get("data", [])
         if isinstance(curve_number, int) and 0 <= curve_number < len(data_traces):
             trace = data_traces[curve_number]
             if isinstance(trace, dict):
                 product_name = trace.get("name") or trace.get("meta")
+
+    if not product_name and isinstance(point.get("data"), dict):
+        product_name = point["data"].get("name") or point["data"].get("meta")
+
+    if not product_name and isinstance(point.get("fullData"), dict):
+        product_name = point["fullData"].get("name") or point["fullData"].get("meta")
 
     if not product_name:
         product_name = "Unknown"
