@@ -3,7 +3,7 @@ from datetime import datetime
 
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-from dash import Input, Output, callback_context, dcc, html
+from dash import Input, Output, dcc, html
 
 from app import app
 from dashboards.aios.datatable_pagesize import DataTableWithPageSizeDD
@@ -17,13 +17,6 @@ from dashboards.shared.database import DB
 
 PATH = "/dashboards/trials_product_usage"
 PRODUCT_LIST = ["BCS", "GRABBER", "EXPORT", "VR"]
-###
-PRODUCT_LABELS = {
-    "BCS": "BCS",
-    "GRABBER": "Grabber",
-    "EXPORT": "Dashboard",
-    "VR": "VR",
-}
 
 
 @app.callback(
@@ -37,7 +30,6 @@ PRODUCT_LABELS = {
         "end_date",
     ),
 )
-
 def update_product_graph(start_date: str, end_date: str):
     """Update the Product usage by day of trial graph."""
     # query the database
@@ -113,90 +105,10 @@ def update_product_graph(start_date: str, end_date: str):
                 x=days,
                 y=[day_to_count.get(day, 0) for day in days],  # fall back to 0 on missing days
                 name=product,
-                ###
-                customdata=[[product, day] for day in days],
-                hovertemplate=(
-                    "Product: %{customdata[0]}<br>Day: %{customdata[1]}<br>"
-                    "Active users: %{y}<extra></extra>"
-                ),
             )
         )
 
     return fig
-
-###
-@app.callback(
-    Output({"index": "free-trials-products-products-table"}, "data"),
-    Output("free-trials-products-products-table-heading", "children"),
-    Input("free-trials-products-products-graph", "clickData"),
-    Input(
-        DatePickerAIO.IDS.datepicker("free-trials-products-global-datepicker"),
-        "start_date",
-    ),
-    Input(
-        DatePickerAIO.IDS.datepicker("free-trials-products-global-datepicker"),
-        "end_date",
-    ),
-)
-def display_product_usage_click_data(
-    product_click_data, start_date: str, end_date: str
-):
-    """Populate the table under the Product usage graph whenever a bar segment is clicked."""
-    if not product_click_data or callback_context.triggered_id != "free-trials-products-products-graph":
-        return [], ""
-
-    point = product_click_data["points"][0]
-    customdata = point.get("customdata") or []
-    if len(customdata) < 2:
-        return [], ""
-
-    product = customdata[0]
-    day = int(customdata[1])
-
-    heading = f"Product: {PRODUCT_LABELS.get(product, product)} - Day {day}"
-
-    # skip database query when there are no active users for the selected slice
-    if not point.get("y"):
-        return [], f"{heading} (no active users)"
-
-    trial_product_customers = DB.fetch_all(
-        """
-        SELECT org.organization_id AS org_id,
-            org.name AS org_name,
-            count(distinct usr.user_id) AS user_count
-        FROM replication.analytics_organization_subscription_type AS ost
-            JOIN replication.analytics_user_license AS ul
-                ON ul.organization_subscription_type_id = ost.organization_subscription_type_id
-            JOIN replication.analytics_user AS usr
-                ON ul.user_id = usr.user_id
-            JOIN replication.analytics_user_activity AS act
-                ON act.user_id = ul.user_id
-            JOIN replication.analytics_organization AS org
-                ON org.organization_id = ost.organization_id
-        WHERE ost.valid_until > :end_date
-            AND ost.valid_from > :start_date
-            AND ost.subscription_type_id = 16
-            AND act.created BETWEEN :start_date AND :end_date
-            AND act.activity = ANY(:relevant_trial_activities)
-            AND split_part(act.activity, '_', 1) = :product_name
-            AND date_part(
-                'day',
-                date_trunc('day', act.created) - date_trunc('day', ost.valid_from)
-            )::int = :day_nr
-            AND usr.username NOT LIKE '%@snapaddy%'
-        GROUP BY org.organization_id, org.name
-        ORDER BY user_count DESC, org_name ASC;
-        """,
-        {
-            "start_date": datetime.fromisoformat(start_date),
-            "end_date": datetime.fromisoformat(end_date),
-            "relevant_trial_activities": RELEVANT_TRIAL_ACTIVITIES,
-            "product_name": product,
-            "day_nr": day - 1,
-        },
-    )
-
-    return trial_product_customers, heading
 
 
 @app.callback(
@@ -534,29 +446,7 @@ def get_layout() -> html.Div:
                             "Number of unique active users (by product and day of their trial)."
                         ),
                         dcc.Loading(dcc.Graph(id="free-trials-products-products-graph")),
-                        ###
-                        html.Br(),
-                        html.H5(
-                            id="free-trials-products-products-table-heading",
-                            className="table-heading",
-                        ),
-                        DataTableWithPageSizeDD(
-                            id={"index": "free-trials-products-products-table"},
-                            columns=[
-                                {
-                                    "name": "Organization",
-                                    "id": "org_name",
-                                    "type": "text",
-                                },
-                                {
-                                    "name": "Active users",
-                                    "id": "user_count",
-                                    "type": "numeric",
-                                    "format": TABLE_INT_FORMAT,
-                                },
-                            ],
-                        ),
-                    ]
+                    ],
                 ),
             ),
             html.Br(),
