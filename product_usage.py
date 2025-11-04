@@ -3,7 +3,7 @@ from datetime import datetime
 
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-from dash import Input, Output, State, callback_context, dcc, html
+from dash import Input, Output, callback_context, dcc, html
 
 from app import app
 from dashboards.aios.datatable_pagesize import DataTableWithPageSizeDD
@@ -114,9 +114,9 @@ def update_product_graph(start_date: str, end_date: str):
                 y=[day_to_count.get(day, 0) for day in days],  # fall back to 0 on missing days
                 name=label,
                 legendgroup=product,
-                customdata=[[product, day] for day in days],
+                customdata=[[product, label, day] for day in days],
                 hovertemplate=(
-                    "Product: %{customdata[0]}<br>Day: %{customdata[1]}<br>"
+                    "Product: %{customdata[1]}<br>Day: %{customdata[2]}<br>"
                     "Active users: %{y}<extra></extra>"
                 ),
             )
@@ -147,14 +147,23 @@ def display_product_usage_click_data(
         return [], ""
 
     point = product_click_data["points"][0]
+    trace_data = point.get("data") or {}
     customdata = point.get("customdata") or []
-    if len(customdata) < 2:
+
+    product = trace_data.get("legendgroup") or (customdata[0] if customdata else None)
+    if not product:
         return [], ""
 
-    product = customdata[0]
-    day = int(customdata[1])
+    day = point.get("x")
+    if day is None and len(customdata) >= 3:
+        day = customdata[2]
+    if day is None:
+        return [], ""
 
-    heading = f"Product: {PRODUCT_LABELS.get(product, product)} - Day {day}"
+    day = int(day)
+
+    product_label = PRODUCT_LABELS.get(product, customdata[1] if len(customdata) >= 2 else product)
+    heading = f"Product: {product_label} - Day {day}"
 
     # skip database query when there are no active users for the selected slice
     if not point.get("y"):
