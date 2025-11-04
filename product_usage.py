@@ -3,7 +3,7 @@ from datetime import datetime
 
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-from dash import Input, Output, callback_context, dcc, html
+from dash import Input, Output, State, callback_context, dcc, html
 
 from app import app
 from dashboards.aios.datatable_pagesize import DataTableWithPageSizeDD
@@ -105,12 +105,15 @@ def update_product_graph(start_date: str, end_date: str):
             if item["product_name"] == product
         }
 
+        label = PRODUCT_LABELS.get(product, product)
+
         # add the trace for this product
         fig.add_trace(
             go.Bar(
                 x=days,
                 y=[day_to_count.get(day, 0) for day in days],  # fall back to 0 on missing days
-                name=product,
+                name=label,
+                legendgroup=product,
                 customdata=[[product, day] for day in days],
                 hovertemplate=(
                     "Product: %{customdata[0]}<br>Day: %{customdata[1]}<br>"
