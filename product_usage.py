@@ -3,7 +3,7 @@ from datetime import datetime
 
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-from dash import Input, Output, callback_context, dcc, html
+from dash import Input, Output, State, callback_context, dcc, html
 
 from app import app
 from dashboards.aios.datatable_pagesize import DataTableWithPageSizeDD
@@ -17,8 +17,7 @@ from dashboards.shared.database import DB
 
 PATH = "/dashboards/trials_product_usage"
 PRODUCT_LIST = ["BCS", "GRABBER", "EXPORT", "VR"]
-DEFAULT_SELECTION_MESSAGE = "Click a segment to show the users for your desired section."
-
+DEFAULT_SELECTION_MESSAGE = "Click a bar segment to show the selected product and trial day."
 
 
 @app.callback(
@@ -107,12 +106,12 @@ def update_product_graph(start_date: str, end_date: str):
                 x=days,
                 y=[day_to_count.get(day, 0) for day in days],  # fall back to 0 on missing days
                 name=product,
-                customdata=[[product]] * len(days),
-
+                customdata=[product] * len(days),
             )
         )
 
     return fig
+
 
 @app.callback(
     Output("free-trials-products-selection-summary", "children"),
@@ -125,8 +124,14 @@ def update_product_graph(start_date: str, end_date: str):
         DatePickerAIO.IDS.datepicker("free-trials-products-global-datepicker"),
         "end_date",
     ),
+    State("free-trials-products-products-graph", "figure"),
 )
-def update_product_selection(click_data: dict | None, _start_date: str | None, _end_date: str | None):
+def update_product_selection(
+    click_data: dict | None,
+    _start_date: str | None,
+    _end_date: str | None,
+    figure_state: dict | None,
+):
     """Display the selected product/day underneath the product usage chart."""
 
     triggered_prop = (
@@ -149,6 +154,14 @@ def update_product_selection(click_data: dict | None, _start_date: str | None, _
 
     if not product_name and isinstance(point.get("fullData"), dict):
         product_name = point["fullData"].get("name") or point["fullData"].get("meta")
+
+    if not product_name and isinstance(figure_state, dict):
+        curve_number = point.get("curveNumber")
+        data_traces = figure_state.get("data", [])
+        if isinstance(curve_number, int) and 0 <= curve_number < len(data_traces):
+            trace = data_traces[curve_number]
+            if isinstance(trace, dict):
+                product_name = trace.get("name") or trace.get("meta")
 
     if not product_name:
         product_name = "Unknown"
