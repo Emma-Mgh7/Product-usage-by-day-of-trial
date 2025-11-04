@@ -1,9 +1,10 @@
 from collections import Counter
 from datetime import datetime
+from typing import Optional
 
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-from dash import Input, Output, callback_context, dcc, html
+from dash import Input, Output, State, callback_context, dcc, html
 
 from app import app
 from dashboards.aios.datatable_pagesize import DataTableWithPageSizeDD
@@ -16,12 +17,13 @@ from dashboards.shared.constants import (
 from dashboards.shared.database import DB
 
 PATH = "/dashboards/trials_product_usage"
-PRODUCT_LIST = ["BCS", "GRABBER", "EXPORT", "VR"]
+PRODUCT_LIST = ["BCS", "GRABBER", "EXPORT", "DASHBOARD", "VR"]
 ###
 PRODUCT_LABELS = {
     "BCS": "BCS",
     "GRABBER": "Grabber",
     "EXPORT": "Dashboard",
+    "DASHBOARD": "Dashboard",
     "VR": "VR",
 }
 
@@ -113,10 +115,9 @@ def update_product_graph(start_date: str, end_date: str):
                 x=days,
                 y=[day_to_count.get(day, 0) for day in days],  # fall back to 0 on missing days
                 name=product,
-                ###
-                customdata=[[product, day] for day in days],
                 hovertemplate=(
-                    "Product: %{customdata[0]}<br>Day: %{customdata[1]}<br>"
+                    f"Product: {PRODUCT_LABELS.get(product, product)}<br>"
+                    "Day: %{x}<br>"
                     "Active users: %{y}<extra></extra>"
                 ),
             )
@@ -137,21 +138,46 @@ def update_product_graph(start_date: str, end_date: str):
         DatePickerAIO.IDS.datepicker("free-trials-products-global-datepicker"),
         "end_date",
     ),
+    State("free-trials-products-products-graph", "figure"),
 )
 def display_product_usage_click_data(
-    product_click_data, start_date: str, end_date: str
+    product_click_data, start_date: str, end_date: str, figure: Optional[dict]
 ):
     """Populate the table under the Product usage graph whenever a bar segment is clicked."""
     if not product_click_data or callback_context.triggered_id != "free-trials-products-products-graph":
         return [], ""
 
-    point = product_click_data["points"][0]
-    customdata = point.get("customdata") or []
-    if len(customdata) < 2:
+    points = product_click_data.get("points", [])
+    if not points:
         return [], ""
 
-    product = customdata[0]
-    day = int(customdata[1])
+    point = points[0]
+    curve_number = point.get("curveNumber")
+    point_number = point.get("pointNumber")
+
+    traces = (figure or {}).get("data", [])
+    trace = traces[curve_number] if isinstance(curve_number, int) and curve_number < len(traces) else {}
+
+    product = trace.get("name") or point.get("customdata", [None])[0]
+    if product is None:
+        return [], ""
+
+    day_value = point.get("x")
+    if day_value is None:
+        x_values = trace.get("x", [])
+        if isinstance(point_number, int) and point_number < len(x_values):
+            day_value = x_values[point_number]
+
+    if day_value is None:
+        return [], ""
+
+    try:
+        day = int(day_value)
+    except (TypeError, ValueError):
+        try:
+            day = int(float(day_value))
+        except (TypeError, ValueError):
+            return [], ""
 
     heading = f"Product: {PRODUCT_LABELS.get(product, product)} - Day {day}"
 
