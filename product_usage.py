@@ -106,7 +106,7 @@ def update_product_graph(start_date: str, end_date: str):
                 x=days,
                 y=[day_to_count.get(day, 0) for day in days],  # fall back to 0 on missing days
                 name=product,
-                customdata=[product] * len(days),
+                customdata=[[product, day] for day in days],
             )
         )
 
@@ -143,11 +143,19 @@ def update_product_selection(
     if not click_data or "points" not in click_data or not click_data["points"]:
         return DEFAULT_SELECTION_MESSAGE
 
-    point = click_data["points"][0]
+    points = click_data.get("points", [])
+    if not points:
+        return DEFAULT_SELECTION_MESSAGE
 
-    product_name = point.get("customdata")
-    if isinstance(product_name, (list, tuple)):
-        product_name = product_name[0] if product_name else None
+    point = next((pt for pt in reversed(points) if pt.get("customdata") is not None), points[-1])
+
+    product_payload = point.get("customdata")
+    if isinstance(product_payload, dict):
+        product_name = product_payload.get("product") or product_payload.get("name")
+    elif isinstance(product_payload, (list, tuple)):
+        product_name = product_payload[0] if product_payload else None
+    else:
+        product_name = product_payload
 
     if not product_name and isinstance(point.get("data"), dict):
         product_name = point["data"].get("name") or point["data"].get("meta")
@@ -162,6 +170,21 @@ def update_product_selection(
             trace = data_traces[curve_number]
             if isinstance(trace, dict):
                 product_name = trace.get("name") or trace.get("meta")
+                if not product_name:
+                    trace_customdata = trace.get("customdata")
+                    point_number = point.get("pointNumber")
+                    if (
+                        isinstance(trace_customdata, list)
+                        and isinstance(point_number, int)
+                        and 0 <= point_number < len(trace_customdata)
+                    ):
+                        payload = trace_customdata[point_number]
+                        if isinstance(payload, dict):
+                            product_name = payload.get("product") or payload.get("name")
+                        elif isinstance(payload, (list, tuple)):
+                            product_name = payload[0] if payload else None
+                        else:
+                            product_name = payload
 
     if not product_name:
         product_name = "Unknown"
